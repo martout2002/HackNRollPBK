@@ -4,9 +4,11 @@ from pynput.keyboard import Controller, Key
 from threading import Thread
 import time
 
-# Initialize Mediapipe pose detection and pynput keyboard controller
+# Initialize Mediapipe pose and hand detection, and pynput keyboard controller
 mp_pose = mp.solutions.pose
 pose = mp_pose.Pose(min_detection_confidence=0.5, min_tracking_confidence=0.5)
+mp_hands = mp.solutions.hands
+hands = mp_hands.Hands(min_detection_confidence=0.5, min_tracking_confidence=0.5)
 mp_drawing = mp.solutions.drawing_utils
 keyboard = Controller()
 
@@ -30,6 +32,10 @@ BOTTOM_REGION = FRAME_HEIGHT * 0.8  # Bottom 20% of the screen
 # Shared frame storage for multithreading
 frame = None
 running = True
+
+# Thumbs up detection state
+thumbs_up_time = 0
+thumbs_up_detected = False
 
 def capture_video():
     """Thread to capture video frames."""
@@ -62,11 +68,12 @@ try:
 
         # Convert frame to RGB for Mediapipe
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        results = pose.process(rgb_frame)
+        pose_results = pose.process(rgb_frame)
+        hand_results = hands.process(rgb_frame)
 
-        if results.pose_landmarks:
+        if pose_results.pose_landmarks:
             # Extract landmarks
-            landmarks = results.pose_landmarks.landmark
+            landmarks = pose_results.pose_landmarks.landmark
             nose = landmarks[mp_pose.PoseLandmark.NOSE]
 
             # Map normalized nose position to frame dimensions
@@ -120,7 +127,7 @@ try:
                 last_lane = current_lane
 
             # Draw landmarks, lanes, and regions on the frame
-            mp_drawing.draw_landmarks(frame, results.pose_landmarks, mp_pose.POSE_CONNECTIONS)
+            mp_drawing.draw_landmarks(frame, pose_results.pose_landmarks, mp_pose.POSE_CONNECTIONS)
 
             # Draw lane boundaries
             cv2.line(frame, (int(lane_thresholds["left"]), 0), (int(lane_thresholds["left"]), FRAME_HEIGHT), (0, 255, 0), 2)
@@ -132,6 +139,35 @@ try:
 
             # Draw current nose position
             cv2.circle(frame, (nose_x, nose_y), 5, (0, 0, 255), -1)  # Current position
+
+        # Detect hand signals (thumbs up)
+        if hand_results.multi_hand_landmarks:
+            for hand_landmarks in hand_results.multi_hand_landmarks:
+                # Thumb tip and index finger tip coordinates
+                thumb_tip = hand_landmarks.landmark[mp_hands.HandLandmark.THUMB_TIP]
+                index_tip = hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_TIP]
+
+                # Calculate relative position (thumb above index finger)
+                if thumb_tip.y < index_tip.y:  # Thumbs up condition
+                    # print("Thumbs up detected!")
+                    if not thumbs_up_detected:
+                        thumbs_up_time = time.time()
+                    thumbs_up_detected = True
+                    keyboard.press(Key.space)
+                    keyboard.release(Key.space)
+                else:
+                    thumbs_up_detected = False
+                    thumbs_up_time = 0  # Reset the thumbs up timer
+
+                # Check if thumbs up has been held for 3 seconds
+                if thumbs_up_detected and time.time() - thumbs_up_time >= 3:
+                    print("Thumbs up held for 3 seconds!")
+                    # Invoke the function here (define later)
+                    thumbs_up_time = 0  # Reset the timer after invoking the function
+                    thumbs_up_detected = False
+
+                # Draw hand landmarks
+                mp_drawing.draw_landmarks(frame, hand_landmarks, mp_hands.HAND_CONNECTIONS)
 
         # Display the mirrored frame
         cv2.imshow('Subway Surfer Lane Control (Mirrored)', frame)
@@ -146,3 +182,4 @@ finally:
     video_thread.join()
     cv2.destroyAllWindows()
     pose.close()
+    hands.close()
