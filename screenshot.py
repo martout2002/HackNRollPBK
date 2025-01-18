@@ -12,6 +12,22 @@ firebase_admin.initialize_app(cred)
 # Access Firestore
 db = firestore.client()
 
+def fetch_leaderboard_data(room_id):
+    """Fetch leaderboard data from firestore"""
+    collection_name= f"private_{room_id}"
+    leaderboard_ref = db.collection(collection_name)
+    docs = leaderboard_ref.order_by("scores", direction=firestore.Query.DESCENDING).limit(3).stream()
+
+    leaderboard=[]
+    for doc in docs:
+        player_data = doc.to_dict()
+        player_name = player_data.get("name", "")
+        player_score = player_data.get("scores", 0)
+        leaderboard.append(f"{player_name} - {player_score} points")
+        
+    return leaderboard
+
+
 # Function to process the screenshot and extract number
 def extract_number_from_image(image_path):
     pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"  # Update if necessary

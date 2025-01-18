@@ -18,15 +18,13 @@ player_id = sys.argv[2]
 # Initialize Mediapipe pose, hands detection, and pynput keyboard controller
 mp_pose = mp.solutions.pose
 pose = mp_pose.Pose(min_detection_confidence=0.5, min_tracking_confidence=0.5)
-mp_hands = mp.solutions.hands
-hands = mp_hands.Hands(min_detection_confidence=0.5, min_tracking_confidence=0.5)
 mp_drawing = mp.solutions.drawing_utils
 keyboard = Controller()
 frame_lock = Lock()
 
 # Constants for jump/squat regions and lane thresholds
-FRAME_WIDTH = 640
-FRAME_HEIGHT = 480
+FRAME_WIDTH = 640 * 2
+FRAME_HEIGHT = 480 * 2
 lane_thresholds = {
     "left": FRAME_WIDTH * (1 / 3),
     "center": FRAME_WIDTH * (2 / 3),
@@ -35,6 +33,15 @@ TOP_REGION = FRAME_HEIGHT * 0.2
 BOTTOM_REGION = FRAME_HEIGHT * 0.8
 COOLDOWN_TIME = 0.3  # Cooldown for key presses in seconds
 
+CLICK_X_COORINDATE = 1110
+CLICK_Y_COORINDATE = 1000
+CLICK_COORINDATES = (CLICK_X_COORINDATE, CLICK_Y_COORINDATE)
+SCREENSHOT_X_REGION = 945
+SCREENSHOT_Y_REGION = 302
+SCREENSHOT_WIDTH = 309
+SCREENSHOT_HEIGHT = 51
+SCREENSHOT_VARIABLES = (SCREENSHOT_X_REGION, SCREENSHOT_Y_REGION, SCREENSHOT_WIDTH, SCREENSHOT_HEIGHT)
+
 # Shared variables
 frame = None
 running = True
@@ -42,11 +49,15 @@ last_key_time = time.time()
 last_lane = None
 thumbs_up_time = 0
 thumbs_up_detected = False
+jump_start_time = 0
+jump_active = False
+squat_active = False
+squat_start_time = 0
 
 # Pre-render leaderboard
 def create_leaderboard_image():
     blank = np.zeros((FRAME_HEIGHT, FRAME_WIDTH, 3), dtype=np.uint8)
-    return display_leaderboard(blank)
+    return display_leaderboard(blank, room_id)
 
 leaderboard_image = create_leaderboard_image()
 
@@ -64,6 +75,12 @@ def create_static_overlay():
     return overlay
 
 static_overlay = create_static_overlay()
+
+# Function to run after 5 seconds of consecutive jumps
+def run_after_jump():
+    print("Jump for 5 seconds detected! Running specified function...")
+    file_path = click_and_screenshot(SCREENSHOT_VARIABLES, CLICK_COORINDATES)
+    join_or_create_leaderboard(player_id, room_id, file_path)
 
 # Capture video thread
 def capture_video():
@@ -101,7 +118,6 @@ try:
         # Mediapipe pose and hand processing
         rgb_frame = cv2.cvtColor(displayed_frame, cv2.COLOR_BGR2RGB)
         pose_results = pose.process(rgb_frame)
-        hand_results = hands.process(rgb_frame)
 
         # Draw pose landmarks and handle jump/squat
         if pose_results.pose_landmarks:
@@ -112,17 +128,40 @@ try:
             nose_y = int(nose.y * FRAME_HEIGHT)
             current_time = time.time()
 
-            if nose_y < TOP_REGION and current_time - last_key_time > COOLDOWN_TIME:
-                print("Jump detected")
-                keyboard.press(Key.up)
-                keyboard.release(Key.up)
-                last_key_time = current_time
+            if nose_y < TOP_REGION:
+                if not jump_active:
+                    jump_start_time = current_time
+                    jump_active = True
+                elif current_time - jump_start_time >= 3:
+                    run_after_jump()
+                    jump_start_time = current_time  # Reset jump start time
+            else:
+                jump_active = False
+            
+            if nose_y > BOTTOM_REGION:
+                if not squat_active:
+                    squat_start_time = current_time
+                    squat_active = True
+                elif current_time - squat_start_time >= 3:
+                    leaderboard_image = create_leaderboard_image()
+                    show_leaderboard = not show_leaderboard
+                    print(f"Leaderboard display toggled: {show_leaderboard}")
+                    squat_start_time = current_time  # Reset jump start time
+            else:
+                squat_active = False
 
-            elif nose_y > BOTTOM_REGION and current_time - last_key_time > COOLDOWN_TIME:
-                print("Squat detected")
-                keyboard.press(Key.down)
-                keyboard.release(Key.down)
-                last_key_time = current_time
+            if current_time - last_key_time > COOLDOWN_TIME:
+                if nose_y < TOP_REGION:
+                    print("Jump detected")
+                    keyboard.press(Key.up)
+                    keyboard.release(Key.up)
+                    last_key_time = current_time
+
+                elif nose_y > BOTTOM_REGION:
+                    print("Squat detected")
+                    keyboard.press(Key.down)
+                    keyboard.release(Key.down)
+                    last_key_time = current_time
 
             # Determine current lane and handle movement
             current_lane = (
@@ -150,27 +189,6 @@ try:
                 last_key_time = current_time
                 last_lane = current_lane
 
-        # Handle thumbs up gesture for screenshot
-        if hand_results.multi_hand_landmarks:
-            for hand_landmarks in hand_results.multi_hand_landmarks:
-                thumb_tip = hand_landmarks.landmark[mp_hands.HandLandmark.THUMB_TIP]
-                index_tip = hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_TIP]
-                if thumb_tip.y < index_tip.y:
-                    if not thumbs_up_detected:
-                        thumbs_up_time = time.time()
-                    thumbs_up_detected = True
-                else:
-                    thumbs_up_detected = False
-                    thumbs_up_time = 0
-
-                if thumbs_up_detected and time.time() - thumbs_up_time >= 3:
-                    print("Thumbs up held for 3 seconds!")
-                    # Invoke the function here (define later)
-                    file_path = click_and_screenshot(SCREENSHOT_VARIABLES, CLICK_COORINDATES)
-                    join_or_create_leaderboard(player_id, room_id, file_path)
-                    thumbs_up_time = 0
-                    thumbs_up_detected = False
-
         # Overlay static elements and leaderboard
         cv2.addWeighted(static_overlay, 1.0, displayed_frame, 1.0, 0, displayed_frame)
         if show_leaderboard:
@@ -182,9 +200,6 @@ try:
 
         # Key press handling
         key = cv2.waitKey(10) & 0xFF
-        if key == ord("w"):
-            show_leaderboard = not show_leaderboard
-            print(f"Leaderboard display toggled: {show_leaderboard}")
         if key == ord("q"):
             running = False
             break
@@ -194,4 +209,3 @@ finally:
     video_thread.join()
     cv2.destroyAllWindows()
     pose.close()
-    hands.close()

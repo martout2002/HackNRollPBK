@@ -1,13 +1,11 @@
 import cv2
+from screenshot import fetch_leaderboard_data
 
-def display_leaderboard(frame):
+def display_leaderboard(frame, room_id):
     """Display a leaderboard directly on the OpenCV frame."""
-    leaderboard = [
-        "Private Leaderboard",
-        "1. Player1 - 999999 points",
-        "2. Player2 - 888888 points",
-        "3. Player3 - 777777 points",
-    ]
+    leaderboard = fetch_leaderboard_data(room_id)
+    if not leaderboard:
+        leaderboard = ["No data available"]
     y_offset = 50
     for line in leaderboard:
         cv2.putText(
