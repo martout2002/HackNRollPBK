@@ -1,9 +1,11 @@
 import cv2
 import mediapipe as mp
 from pynput.keyboard import Controller, Key
-from threading import Thread
+from threading import Thread, Lock
 import time
 from screenshot_click_module import click_and_screenshot
+from leaderboard import display_leaderboard
+import numpy as np
 
 # Initialize Mediapipe pose and hand detection, and pynput keyboard controller
 mp_pose = mp.solutions.pose
@@ -12,6 +14,7 @@ mp_hands = mp.solutions.hands
 hands = mp_hands.Hands(min_detection_confidence=0.5, min_tracking_confidence=0.5)
 mp_drawing = mp.solutions.drawing_utils
 keyboard = Controller()
+frame_lock = Lock()
 
 # Cooldown timer for key presses
 last_lane = None
@@ -64,18 +67,32 @@ def capture_video():
             break
         # Resize and mirror the frame
         captured_frame = cv2.resize(captured_frame, (FRAME_WIDTH, FRAME_HEIGHT))
-        frame = cv2.flip(captured_frame, 1)  # Mirror the frame horizontally
+        with frame_lock:
+            frame = cv2.flip(captured_frame, 1)  # Mirror the frame horizontally
     cap.release()
 
 # Start video capture thread
 video_thread = Thread(target=capture_video)
 video_thread.start()
 
+# Pre-render the leaderboard as an image
+def create_leaderboard_image():
+    blank = np.zeros((FRAME_HEIGHT, FRAME_WIDTH, 3), dtype=np.uint8)
+    return display_leaderboard(blank)
+
+leaderboard_image = create_leaderboard_image()
+
+
 try:
+    
+    show_leaderboard = False
+
     while running:
-        if frame is None:
-            time.sleep(0.01)  # Wait for the first frame
-            continue
+        with frame_lock:
+            if frame is None:
+                time.sleep(0.01)  # Wait for the first frame to be captured
+                continue
+            displayed_frame = frame.copy()
 
         # Convert frame to RGB for Mediapipe
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -151,6 +168,16 @@ try:
             # Draw current nose position
             cv2.circle(frame, (nose_x, nose_y), 5, (0, 0, 255), -1)  # Current position
 
+        # Display leaderboard if the flag is set
+        
+            # Overlay the leaderboard
+        if show_leaderboard:
+            alpha = 0.8  # Transparency level
+            cv2.addWeighted(leaderboard_image, alpha, displayed_frame, 1 - alpha, 0, displayed_frame)
+
+        # Show the OpenCV frame
+        cv2.imshow("Video Feed with Leaderboard", displayed_frame)
+
         # Detect hand signals (thumbs up)
         if hand_results.multi_hand_landmarks:
             for hand_landmarks in hand_results.multi_hand_landmarks:
@@ -179,13 +206,16 @@ try:
                 # Draw hand landmarks 
                 mp_drawing.draw_landmarks(frame, hand_landmarks, mp_hands.HAND_CONNECTIONS)
 
-        # Display the mirrored frame
-        cv2.imshow('Subway Surfer Lane Control (Mirrored)', frame)
-
-        # Break loop on 'q' key
-        if cv2.waitKey(10) & 0xFF == ord('q'):
+        # Check for key press
+        key = cv2.waitKey(10) & 0xFF
+        if key == ord("w"):  # Toggle leaderboard
+            show_leaderboard = not show_leaderboard
+            print(f"Leaderboard display toggled: {show_leaderboard}")
+        if key == ord("q"):  # Quit
             running = False
             break
+
+        
 finally:
     # Clean up
     running = False
