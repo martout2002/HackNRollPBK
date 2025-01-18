@@ -47,13 +47,13 @@ def click_and_screenshot(region, click_point=None):
     else:
         click_x, click_y = click_point
 
+    # Take the screenshot
+    take_screenshot(file_path, region)
+
     # Simulate a click
     pyautogui.click(click_x, click_y)
     pyautogui.click(click_x, click_y)
     print(f"Clicked at ({click_x}, {click_y})")
-
-    # Take the screenshot
-    take_screenshot(file_path, region)
 
     # Return the file path
     return file_path
