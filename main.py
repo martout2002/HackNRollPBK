@@ -6,6 +6,14 @@ import time
 from screenshot_click_module import click_and_screenshot
 from leaderboard import display_leaderboard
 import numpy as np
+from screenshot import join_or_create_leaderboard
+import sys
+
+if len(sys.argv) != 2:
+    print("Pass 2 Argument: 1) Room Id 2) Player Id")
+
+room_id = sys.argv[1]
+player_id = sys.argv[2]
 
 # Initialize Mediapipe pose, hands detection, and pynput keyboard controller
 mp_pose = mp.solutions.pose
@@ -156,8 +164,11 @@ try:
                     thumbs_up_time = 0
 
                 if thumbs_up_detected and time.time() - thumbs_up_time >= 3:
-                    print("Thumbs up held for 3 seconds! Taking screenshot...")
-                    click_and_screenshot(SCREENSHOT_VARIABLES, CLICK_COORINDATES)
+                    print("Thumbs up held for 3 seconds!")
+                    # Invoke the function here (define later)
+                    file_path = click_and_screenshot(SCREENSHOT_VARIABLES, CLICK_COORINDATES)
+                    join_or_create_leaderboard(player_id, room_id, file_path)
+                    thumbs_up_time = 0
                     thumbs_up_detected = False
 
         # Overlay static elements and leaderboard

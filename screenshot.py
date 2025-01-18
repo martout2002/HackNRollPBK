@@ -11,13 +11,10 @@ firebase_admin.initialize_app(cred)
 
 # Access Firestore
 db = firestore.client()
-image_path = "./image.jpg"
-player_id = 3
-room_id = 1
 
 # Function to process the screenshot and extract number
 def extract_number_from_image(image_path):
-    pytesseract.pytesseract.tesseract_cmd = "/opt/homebrew/bin/tesseract"  # Update if necessary
+    pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"  # Update if necessary
     image = Image.open(image_path)
     text = pytesseract.image_to_string(image, config="--psm 7")  # PSM 7 assumes a single line of text
     print(f"Extracted text: {text}")
@@ -32,7 +29,7 @@ def extract_number_from_image(image_path):
         return None
 
 # Function to create or join a private leaderboard
-def join_or_create_leaderboard(player_id, room_id):
+def join_or_create_leaderboard(player_id, room_id, image_path):
     score = extract_number_from_image(image_path)
     if score is None:
         print("No valid score extracted from the image. Exiting.")
@@ -45,7 +42,6 @@ def join_or_create_leaderboard(player_id, room_id):
 
     # Check if the leaderboard exists
     doc = leaderboard_ref.get()
-    print(doc.exists)
     if doc.exists:
         print(f"Joining existing leaderboard for {player_id}")
 
@@ -76,9 +72,8 @@ def join_or_create_leaderboard(player_id, room_id):
         # If the leaderboard doesn't exist, create it
         print(f"Creating new leaderboard for {player_id}")
         leaderboard_ref.set({
+            "name": player_id,
             "scores": score  # Ensure this is a list of dictionaries
         })
 
 # Extract the number and update the leaderboard
-extract_number_from_image(image_path)
-join_or_create_leaderboard(player_id, room_id)
