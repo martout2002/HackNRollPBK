@@ -10,19 +10,22 @@ pose = mp_pose.Pose(min_detection_confidence=0.5, min_tracking_confidence=0.5)
 mp_drawing = mp.solutions.drawing_utils
 keyboard = Controller()
 
-# Cooldown timers
-action_cooldown = {"up": 0, "down": 0, "left": 0, "right": 0}
-COOLDOWN_TIME = 0.5  # 500ms cooldown
+# Cooldown timer for key presses
+last_lane = None
+COOLDOWN_TIME = 0.3  # 300ms cooldown
+last_key_time = time.time()
 
-# Screen dimensions (divided into regions)
+# Screen dimensions and lane thresholds
 FRAME_WIDTH = 640
 FRAME_HEIGHT = 480
-region_thresholds = {
-    "up": FRAME_HEIGHT * 0.3,
-    "down": FRAME_HEIGHT * 0.7,
-    "left": FRAME_WIDTH * 0.3,
-    "right": FRAME_WIDTH * 0.7,
+lane_thresholds = {
+    "left": FRAME_WIDTH * (1 / 3),  # Left lane end
+    "center": FRAME_WIDTH * (2 / 3),  # Center lane end
 }
+
+# Regions for jump and squat
+TOP_REGION = FRAME_HEIGHT * 0.2  # Top 20% of the screen
+BOTTOM_REGION = FRAME_HEIGHT * 0.8  # Bottom 20% of the screen
 
 # Shared frame storage for multithreading
 frame = None
@@ -42,7 +45,9 @@ def capture_video():
             print("Error: Frame not read properly.")
             running = False
             break
-        frame = cv2.resize(captured_frame, (FRAME_WIDTH, FRAME_HEIGHT))  # Resize for consistent regions
+        # Resize and mirror the frame
+        captured_frame = cv2.resize(captured_frame, (FRAME_WIDTH, FRAME_HEIGHT))
+        frame = cv2.flip(captured_frame, 1)  # Mirror the frame horizontally
     cap.release()
 
 # Start video capture thread
@@ -64,49 +69,72 @@ try:
             landmarks = results.pose_landmarks.landmark
             nose = landmarks[mp_pose.PoseLandmark.NOSE]
 
-            # Map normalized positions to frame dimensions
+            # Map normalized nose position to frame dimensions
             nose_x = int(nose.x * FRAME_WIDTH)
             nose_y = int(nose.y * FRAME_HEIGHT)
+
             current_time = time.time()
 
-            # Determine screen region for the nose position
-            if nose_y < region_thresholds["up"] and current_time - action_cooldown["up"] > COOLDOWN_TIME:
-                print("Head moved up")
+            # Detect jump and squat based on nose position in the frame
+            if nose_y < TOP_REGION and current_time - last_key_time > COOLDOWN_TIME:
+                print("Jump detected")
                 keyboard.press(Key.up)
                 keyboard.release(Key.up)
-                action_cooldown["up"] = current_time
+                last_key_time = current_time
 
-            elif nose_y > region_thresholds["down"] and current_time - action_cooldown["down"] > COOLDOWN_TIME:
-                print("Head moved down")
+            elif nose_y > BOTTOM_REGION and current_time - last_key_time > COOLDOWN_TIME:
+                print("Squat detected")
                 keyboard.press(Key.down)
                 keyboard.release(Key.down)
-                action_cooldown["down"] = current_time
+                last_key_time = current_time
 
-            elif nose_x < region_thresholds["left"] and current_time - action_cooldown["left"] > COOLDOWN_TIME:
-                print("Head moved left")
-                keyboard.press(Key.right)
-                keyboard.release(Key.right)
-                action_cooldown["left"] = current_time
-
-            elif nose_x > region_thresholds["right"] and current_time - action_cooldown["right"] > COOLDOWN_TIME:
-                print("Head moved right")
-                keyboard.press(Key.left)
-                keyboard.release(Key.left)
-                action_cooldown["right"] = current_time
+            # Determine current lane
+            if nose_x < lane_thresholds["left"]:
+                current_lane = "left"
+            elif nose_x < lane_thresholds["center"]:
+                current_lane = "center"
             else:
-                # No significant movement detected
-                pass
+                current_lane = "right"
 
-            # Draw landmarks and regions on the frame
+            # Handle lane change if cooldown has elapsed
+            if current_lane != last_lane and current_time - last_key_time > COOLDOWN_TIME:
+                if last_lane == "left" and current_lane == "center":
+                    print("Move right")
+                    keyboard.press(Key.right)
+                    keyboard.release(Key.right)
+                elif last_lane == "center":
+                    if current_lane == "right":
+                        print("Move right")
+                        keyboard.press(Key.right)
+                        keyboard.release(Key.right)
+                    elif current_lane == "left":
+                        print("Move left")
+                        keyboard.press(Key.left)
+                        keyboard.release(Key.left)
+                elif last_lane == "right" and current_lane == "center":
+                    print("Move left")
+                    keyboard.press(Key.left)
+                    keyboard.release(Key.left)
+
+                last_key_time = current_time
+                last_lane = current_lane
+
+            # Draw landmarks, lanes, and regions on the frame
             mp_drawing.draw_landmarks(frame, results.pose_landmarks, mp_pose.POSE_CONNECTIONS)
-            # Draw regions
-            cv2.line(frame, (0, int(region_thresholds["up"])), (FRAME_WIDTH, int(region_thresholds["up"])), (0, 255, 0), 2)
-            cv2.line(frame, (0, int(region_thresholds["down"])), (FRAME_WIDTH, int(region_thresholds["down"])), (0, 255, 0), 2)
-            cv2.line(frame, (int(region_thresholds["left"]), 0), (int(region_thresholds["left"]), FRAME_HEIGHT), (255, 0, 0), 2)
-            cv2.line(frame, (int(region_thresholds["right"]), 0), (int(region_thresholds["right"]), FRAME_HEIGHT), (255, 0, 0), 2)
 
-        # Display the frame
-        cv2.imshow('Head Movement Detection', frame)
+            # Draw lane boundaries
+            cv2.line(frame, (int(lane_thresholds["left"]), 0), (int(lane_thresholds["left"]), FRAME_HEIGHT), (0, 255, 0), 2)
+            cv2.line(frame, (int(lane_thresholds["center"]), 0), (int(lane_thresholds["center"]), FRAME_HEIGHT), (0, 255, 0), 2)
+
+            # Draw jump/squat regions
+            cv2.line(frame, (0, int(TOP_REGION)), (FRAME_WIDTH, int(TOP_REGION)), (255, 0, 0), 2)  # Top region
+            cv2.line(frame, (0, int(BOTTOM_REGION)), (FRAME_WIDTH, int(BOTTOM_REGION)), (255, 0, 0), 2)  # Bottom region
+
+            # Draw current nose position
+            cv2.circle(frame, (nose_x, nose_y), 5, (0, 0, 255), -1)  # Current position
+
+        # Display the mirrored frame
+        cv2.imshow('Subway Surfer Lane Control (Mirrored)', frame)
 
         # Break loop on 'q' key
         if cv2.waitKey(10) & 0xFF == ord('q'):
