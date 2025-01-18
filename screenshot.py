@@ -30,7 +30,7 @@ def fetch_leaderboard_data(room_id):
 
 # Function to process the screenshot and extract number
 def extract_number_from_image(image_path):
-    pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"  # Update if necessary
+    pytesseract.pytesseract.tesseract_cmd = r"/opt/homebrew/bin/tesseract"  # Update if necessary
     image = Image.open(image_path)
     text = pytesseract.image_to_string(image, config="--psm 7")  # PSM 7 assumes a single line of text
     print(f"Extracted text: {text}")

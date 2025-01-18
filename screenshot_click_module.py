@@ -1,5 +1,7 @@
 import os
 import pyautogui
+from PIL import ImageGrab
+
 
 def ensure_directory(directory_path):
     """Ensure the directory exists, create if it does not."""
@@ -17,8 +19,13 @@ def take_screenshot(file_path, region):
     directory = os.path.dirname(file_path)
     ensure_directory(directory)
 
+    # Adjust the region to bbox format
+    bbox = (region[0], region[1], region[0] + region[2], region[1] + region[3])
+    print(f"Screenshot bbox: {bbox}")  # Debugging print
+
     # Take the screenshot
-    pyautogui.screenshot(file_path, region=region)
+    screenshot = ImageGrab.grab(bbox=bbox)  # bbox=(x1, y1, x2, y2)
+    screenshot.save(file_path)
     print(f"Screenshot saved to {file_path}")
 
 def click_and_screenshot(region, click_point=None):
