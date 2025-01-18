@@ -29,8 +29,8 @@ lane_thresholds = {
     "left": FRAME_WIDTH * (1 / 3),
     "center": FRAME_WIDTH * (2 / 3),
 }
-TOP_REGION = FRAME_HEIGHT * 0.2
-BOTTOM_REGION = FRAME_HEIGHT * 0.8
+TOP_REGION = FRAME_HEIGHT * 0.3
+BOTTOM_REGION = FRAME_HEIGHT * 0.7
 COOLDOWN_TIME = 0.3  # Cooldown for key presses in seconds
 
 CLICK_X_COORINDATE = 890
