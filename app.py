@@ -66,7 +66,7 @@ while True:
         if current_row == 0:  # Top section
             pyautogui.press("up")
             current_input = "up"
-        elif current_row == 2:  # Bottom section
+        elif current_row == 2 and current_row != 1:  # Bottom section only (not middle)
             pyautogui.press("down")
             current_input = "down"
 
