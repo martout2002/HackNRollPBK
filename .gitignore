@@ -3,8 +3,12 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+/images
+
 # C extensions
 *.so
+
+firebase_config.json
 
 # Distribution / packaging
 .Python

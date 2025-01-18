@@ -3,6 +3,7 @@ import mediapipe as mp
 from pynput.keyboard import Controller, Key
 from threading import Thread
 import time
+from screenshot_click_module import click_and_screenshot
 
 # Initialize Mediapipe pose and hand detection, and pynput keyboard controller
 mp_pose = mp.solutions.pose
@@ -24,6 +25,16 @@ lane_thresholds = {
     "left": FRAME_WIDTH * (1 / 3),  # Left lane end
     "center": FRAME_WIDTH * (2 / 3),  # Center lane end
 }
+
+CLICK_X_COORINDATE = 1110
+CLICK_Y_COORINDATE = 1000
+CLICK_COORINDATES = (CLICK_X_COORINDATE, CLICK_Y_COORINDATE)
+
+SCREENSHOT_X_REGION = 945
+SCREENSHOT_Y_REGION = 302
+SCREENSHOT_WIDTH = 309
+SCREENSHOT_HEIGHT = 51
+SCREENSHOT_VARIABLES = (SCREENSHOT_X_REGION, SCREENSHOT_Y_REGION, SCREENSHOT_WIDTH, SCREENSHOT_HEIGHT)
 
 # Regions for jump and squat
 TOP_REGION = FRAME_HEIGHT * 0.2  # Top 20% of the screen
@@ -149,12 +160,10 @@ try:
 
                 # Calculate relative position (thumb above index finger)
                 if thumb_tip.y < index_tip.y:  # Thumbs up condition
-                    # print("Thumbs up detected!")
+                    print("Thumbs up detected!")
                     if not thumbs_up_detected:
                         thumbs_up_time = time.time()
                     thumbs_up_detected = True
-                    keyboard.press(Key.space)
-                    keyboard.release(Key.space)
                 else:
                     thumbs_up_detected = False
                     thumbs_up_time = 0  # Reset the thumbs up timer
@@ -163,10 +172,11 @@ try:
                 if thumbs_up_detected and time.time() - thumbs_up_time >= 3:
                     print("Thumbs up held for 3 seconds!")
                     # Invoke the function here (define later)
-                    thumbs_up_time = 0  # Reset the timer after invoking the function
+                    click_and_screenshot(SCREENSHOT_VARIABLES, CLICK_COORINDATES)
                     thumbs_up_detected = False
+                    thumbs_up_time = 0  # Reset the timer after invoking the function
 
-                # Draw hand landmarks
+                # Draw hand landmarks 
                 mp_drawing.draw_landmarks(frame, hand_landmarks, mp_hands.HAND_CONNECTIONS)
 
         # Display the mirrored frame
